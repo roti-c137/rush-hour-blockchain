@@ -1,7 +1,11 @@
+#![allow(unused)]
 use std::{
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter, Result},
+    mem::size_of_val,
+    time::Instant,
 };
+const MAX_ARR_INDEX: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum MovementDirection {
@@ -32,7 +36,7 @@ pub struct Step {
     direction: MovementDirection,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 struct Board([[i8; 6]; 6]);
 
 impl Board {
@@ -57,57 +61,77 @@ impl Board {
     }
 
     fn get_possible_steps(&self) -> Vec<Step> {
-        let mut steps: Vec<Step> = Vec::new();
-        let mut positions: HashMap<i8, Vec<(usize, usize)>> = HashMap::new();
+        let mut car_searched: HashMap<i8, bool> = HashMap::new();
+        let mut steps_new: Vec<Step> = Vec::new();
+        let mut iteration1 = 0;
+        {
+            for x in 0..6 {
+                for y in 0..6 {
+                    let car_id = self.0[x][y];
+                    if car_id == 0 || car_searched.get(&car_id).is_some() {
+                        continue;
+                    }
+                    car_searched.insert(car_id, true);
 
-        for i in 0..6 {
-            for j in 0..6 {
-                let car_id = self.0[i][j];
-                if car_id != 0 {
-                    positions.entry(car_id).or_default().push((i, j));
+                    // Search car surrounding, from 0.0
+                    // Search right
+                    let right_coor = y + 1;
+                    if (right_coor <= MAX_ARR_INDEX && self.0[x][right_coor] == car_id) {
+                        // can car move left?
+                        if y > 0 && self.0[x][y - 1] == 0 {
+                            steps_new.push(Step {
+                                car_id,
+                                direction: MovementDirection::Left,
+                            })
+                        }
+
+                        // can car move right?
+                        let mut move_right_coor = right_coor + 1;
+                        // 3 coordinate car
+                        if move_right_coor <= MAX_ARR_INDEX && self.0[x][move_right_coor] == car_id
+                        {
+                            move_right_coor += 1;
+                        }
+
+                        if move_right_coor <= MAX_ARR_INDEX && self.0[x][move_right_coor] == 0 {
+                            steps_new.push(Step {
+                                car_id,
+                                direction: MovementDirection::Right,
+                            })
+                        }
+                    }
+
+                    // Search down
+                    let down_coor = x + 1;
+                    if down_coor <= MAX_ARR_INDEX && self.0[down_coor][y] == car_id {
+                        // can car move up?
+                        if x > 0 && self.0[x - 1][y] == 0 {
+                            steps_new.push(Step {
+                                car_id,
+                                direction: MovementDirection::Up,
+                            })
+                        }
+
+                        // can car move down?
+                        let mut move_down_coor = down_coor + 1;
+                        // 3 coord car
+                        if move_down_coor <= MAX_ARR_INDEX && self.0[move_down_coor][y] == car_id {
+                            move_down_coor += 1;
+                        }
+
+                        if move_down_coor <= MAX_ARR_INDEX && self.0[move_down_coor][y] == 0 {
+                            steps_new.push(Step {
+                                car_id,
+                                direction: MovementDirection::Down,
+                            })
+                        }
+                    }
+                    iteration1 += 1;
                 }
             }
         }
 
-        for (&car_id, positions) in &positions {
-            let is_horizontal = positions.iter().all(|&(r, _)| r == positions[0].0);
-
-            if is_horizontal {
-                let left_most = positions.iter().min_by_key(|&&(_, c)| c).unwrap().1;
-                let right_most = positions.iter().max_by_key(|&&(_, c)| c).unwrap().1;
-
-                if left_most > 0 && self.0[positions[0].0][left_most - 1] == 0 {
-                    steps.push(Step {
-                        car_id,
-                        direction: MovementDirection::Left,
-                    });
-                }
-                if right_most < 5 && self.0[positions[0].0][right_most + 1] == 0 {
-                    steps.push(Step {
-                        car_id,
-                        direction: MovementDirection::Right,
-                    });
-                }
-            } else {
-                let top_most = positions.iter().min_by_key(|&&(r, _)| r).unwrap().0;
-                let bottom_most = positions.iter().max_by_key(|&&(r, _)| r).unwrap().0;
-
-                if top_most > 0 && self.0[top_most - 1][positions[0].1] == 0 {
-                    steps.push(Step {
-                        car_id,
-                        direction: MovementDirection::Up,
-                    });
-                }
-                if bottom_most < 5 && self.0[bottom_most + 1][positions[0].1] == 0 {
-                    steps.push(Step {
-                        car_id,
-                        direction: MovementDirection::Down,
-                    });
-                }
-            }
-        }
-
-        steps
+        steps_new
     }
 
     fn apply_step(&self, step: Step) -> Self {
@@ -145,25 +169,43 @@ impl Board {
 
 pub fn solve(board: [[i8; 6]; 6]) -> Vec<Step> {
     let initial_board = Board::new(board);
-    let mut visited = HashMap::new();
-    let mut queue = VecDeque::new();
-    queue.push_back((initial_board, Vec::new()));
+    // println!(
+    //     "The size of initial_board is {}",
+    //     size_of_val(&initial_board)
+    // );
+    // let compact_initial_board = "2220030040031140003504066500070888070";
+    // println!(
+    //     "The size of compact_initial_board is {}",
+    //     size_of_val(&compact_initial_board)
+    // );
 
-    while let Some((current_board, steps)) = queue.pop_front() {
+    let mut visited_board = HashMap::new();
+    let mut queue_board = VecDeque::new();
+    queue_board.push_front((initial_board, Vec::new()));
+
+    let mut count = 1;
+    let now1 = Instant::now();
+    while let Some((current_board, historical_steps)) = queue_board.pop_front() {
+        // println!("Queue of board with steps:{:#?}", queue_board);
         if current_board.is_goal() {
-            return steps;
+            println!("Finish\nTotal iterations: {:#?}", count); // 4544
+            println!("Size of visited_board: {}", visited_board.keys().len());
+            println!("Elapsed: {:.2?}", now1.elapsed());
+            return historical_steps;
         }
 
-        if visited.insert(current_board.clone(), true).is_some() {
+        if visited_board.insert(current_board.clone(), true).is_some() {
             continue;
         }
 
-        for step in current_board.get_possible_steps() {
+        let steps = current_board.get_possible_steps();
+        for step in steps {
             let next_board = current_board.apply_step(step.clone());
-            if visited.get(&next_board).is_none() {
-                let mut next_steps = steps.clone();
-                next_steps.push(step.clone());
-                queue.push_back((next_board, next_steps));
+            count += 1;
+            if visited_board.get(&next_board).is_none() {
+                let mut new_historical_steps = historical_steps.clone();
+                new_historical_steps.push(step.clone());
+                queue_board.push_back((next_board, new_historical_steps));
             }
         }
     }
@@ -174,11 +216,12 @@ pub fn solve(board: [[i8; 6]; 6]) -> Vec<Step> {
 pub fn print_solution(board: [[i8; 6]; 6], solution: &[Step]) {
     let mut current_board = Board::new(board);
     println!("Initial Board:");
+
     current_board.print_board();
 
-    for step in solution {
-        println!("Applying step: Move Car {} {}", step.car_id, step.direction);
-        current_board = current_board.apply_step(step.clone());
-        current_board.print_board();
-    }
+    // for step in solution {
+    //     println!("Applying step: Move Car {} {}", step.car_id, step.direction);
+    //     current_board = current_board.apply_step(step.clone());
+    //     current_board.print_board();
+    // }
 }

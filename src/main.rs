@@ -1,3 +1,4 @@
+#![allow(unused)]
 mod solution1;
 mod solution2;
 fn main() {
@@ -20,7 +21,6 @@ fn main() {
     ];
 
     let solutions = solution2::solve(b);
-    println!("solution steps: {:?}", solutions);
-
-    solution2::print_solution(b, &solutions)
+    // println!("solution steps: {:?}", solutions);
+    // solution2::print_solution(b, &solutions)
 }
